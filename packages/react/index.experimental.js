@@ -45,8 +45,5 @@ export {
   unstable_withSuspenseConfig,
   // enableBlocksAPI
   block,
-  // enableJSXTransformAPI
-  jsx,
-  jsxs,
-  jsxDEV,
 } from './src/React';
+export {jsx, jsxs, jsxDEV} from './src/jsx/ReactJSX';

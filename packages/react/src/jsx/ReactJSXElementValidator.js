@@ -4,16 +4,15 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
-
 /**
  * ReactElementValidator provides a wrapper around a element factory
  * which validates the props passed to the element. This is intended to be
  * used only in DEV and could be replaced by a static type checker for languages
  * that support it.
  */
-
 import isValidElementType from 'shared/isValidElementType';
 import getComponentName from 'shared/getComponentName';
+import checkPropTypes from 'shared/checkPropTypes';
 import {
   getIteratorFn,
   REACT_FORWARD_REF_TYPE,
@@ -21,18 +20,16 @@ import {
   REACT_FRAGMENT_TYPE,
   REACT_ELEMENT_TYPE,
 } from 'shared/ReactSymbols';
-import checkPropTypes from 'shared/checkPropTypes';
-
-import ReactCurrentOwner from './ReactCurrentOwner';
-import {isValidElement, createElement, cloneElement} from './ReactElement';
-import {setCurrentlyValidatingElement} from './ReactDebugCurrentFrame';
-
+import {warnAboutSpreadingKeyToJSX} from 'shared/ReactFeatureFlags';
+import {isValidElement, jsxDEV} from './ReactJSXElement';
+import ReactSharedInternals from 'shared/ReactSharedInternals';
+const ReactCurrentOwner = ReactSharedInternals.ReactCurrentOwner;
+const ReactDebugCurrentFrame = ReactSharedInternals.ReactDebugCurrentFrame;
 let propTypesMisspellWarningShown;
-
 if (__DEV__) {
   propTypesMisspellWarningShown = false;
 }
-
+const hasOwnProperty = Object.prototype.hasOwnProperty;
 function getDeclarationErrorAddendum() {
   if (ReactCurrentOwner.current) {
     const name = getComponentName(ReactCurrentOwner.current.type);
@@ -42,7 +39,6 @@ function getDeclarationErrorAddendum() {
   }
   return '';
 }
-
 function getSourceInfoErrorAddendum(source) {
   if (source !== undefined) {
     const fileName = source.fileName.replace(/^.*[\\\/]/, '');
@@ -51,24 +47,14 @@ function getSourceInfoErrorAddendum(source) {
   }
   return '';
 }
-
-function getSourceInfoErrorAddendumForProps(elementProps) {
-  if (elementProps !== null && elementProps !== undefined) {
-    return getSourceInfoErrorAddendum(elementProps.__source);
-  }
-  return '';
-}
-
 /**
  * Warn if there's no key explicitly set on dynamic arrays of children or
  * object keys are not valid. This allows us to keep track of children between
  * updates.
  */
 const ownerHasKeyUseWarning = {};
-
 function getCurrentComponentErrorInfo(parentType) {
   let info = getDeclarationErrorAddendum();
-
   if (!info) {
     const parentName =
       typeof parentType === 'string'
@@ -80,7 +66,6 @@ function getCurrentComponentErrorInfo(parentType) {
   }
   return info;
 }
-
 /**
  * Warn if the element doesn't have an explicit key assigned to it.
  * This element is in an array. The array could grow and shrink or be
@@ -97,13 +82,11 @@ function validateExplicitKey(element, parentType) {
     return;
   }
   element._store.validated = true;
-
   const currentComponentErrorInfo = getCurrentComponentErrorInfo(parentType);
   if (ownerHasKeyUseWarning[currentComponentErrorInfo]) {
     return;
   }
   ownerHasKeyUseWarning[currentComponentErrorInfo] = true;
-
   // Usually the current owner is the offender, but if it accepts children as a
   // property, it may be the creator of the child that's responsible for
   // assigning it a key.
@@ -118,8 +101,7 @@ function validateExplicitKey(element, parentType) {
       element._owner.type,
     )}.`;
   }
-
-  setCurrentlyValidatingElement(element);
+  ReactDebugCurrentFrame.setCurrentlyValidatingElement(element);
   if (__DEV__) {
     console.error(
       'Each child in a list should have a unique "key" prop.' +
@@ -128,9 +110,8 @@ function validateExplicitKey(element, parentType) {
       childOwner,
     );
   }
-  setCurrentlyValidatingElement(null);
+  ReactDebugCurrentFrame.setCurrentlyValidatingElement(null);
 }
-
 /**
  * Ensure that every element either is passed in a static location, in an
  * array with an explicit keys property defined, or in an object literal
@@ -173,7 +154,6 @@ function validateChildKeys(node, parentType) {
     }
   }
 }
-
 /**
  * Given an element, validate that its props follow the propTypes definition,
  * provided by the type.
@@ -202,9 +182,9 @@ function validatePropTypes(element) {
       return;
     }
     if (propTypes) {
-      setCurrentlyValidatingElement(element);
+      ReactDebugCurrentFrame.setCurrentlyValidatingElement(element);
       checkPropTypes(propTypes, element.props, 'prop', name);
-      setCurrentlyValidatingElement(null);
+      ReactDebugCurrentFrame.setCurrentlyValidatingElement(null);
     } else if (type.PropTypes !== undefined && !propTypesMisspellWarningShown) {
       propTypesMisspellWarningShown = true;
       console.error(
@@ -223,15 +203,13 @@ function validatePropTypes(element) {
     }
   }
 }
-
 /**
  * Given a fragment, validate that it can only be provided with fragment props
  * @param {ReactElement} fragment
  */
 function validateFragmentProps(fragment) {
   if (__DEV__) {
-    setCurrentlyValidatingElement(fragment);
-
+    ReactDebugCurrentFrame.setCurrentlyValidatingElement(fragment);
     const keys = Object.keys(fragment.props);
     for (let i = 0; i < keys.length; i++) {
       const key = keys[i];
@@ -244,18 +222,21 @@ function validateFragmentProps(fragment) {
         break;
       }
     }
-
     if (fragment.ref !== null) {
       console.error('Invalid attribute `ref` supplied to `React.Fragment`.');
     }
-
-    setCurrentlyValidatingElement(null);
+    ReactDebugCurrentFrame.setCurrentlyValidatingElement(null);
   }
 }
-
-export function createElementWithValidation(type, props, children) {
+export function jsxWithValidation(
+  type,
+  props,
+  key,
+  isStaticChildren,
+  source,
+  self,
+) {
   const validType = isValidElementType(type);
-
   // We warn in this case but don't throw. We expect the element creation to
   // succeed and there will likely be errors in render.
   if (!validType) {
@@ -270,14 +251,12 @@ export function createElementWithValidation(type, props, children) {
         ' You likely forgot to export your component from the file ' +
         "it's defined in, or you might have mixed up default and named imports.";
     }
-
-    const sourceInfo = getSourceInfoErrorAddendumForProps(props);
+    const sourceInfo = getSourceInfoErrorAddendum(source);
     if (sourceInfo) {
       info += sourceInfo;
     } else {
       info += getDeclarationErrorAddendum();
     }
-
     let typeString;
     if (type === null) {
       typeString = 'null';
@@ -290,10 +269,9 @@ export function createElementWithValidation(type, props, children) {
     } else {
       typeString = typeof type;
     }
-
     if (__DEV__) {
       console.error(
-        'React.createElement: type is invalid -- expected a string (for ' +
+        'React.jsx: type is invalid -- expected a string (for ' +
           'built-in components) or a class/function (for composite ' +
           'components) but got: %s.%s',
         typeString,
@@ -301,73 +279,68 @@ export function createElementWithValidation(type, props, children) {
       );
     }
   }
-
-  const element = createElement.apply(this, arguments);
-
+  const element = jsxDEV(type, props, key, source, self);
   // The result can be nullish if a mock or a custom function is used.
   // TODO: Drop this when these are no longer allowed as the type argument.
   if (element == null) {
     return element;
   }
-
   // Skip key warning if the type isn't valid since our key validation logic
   // doesn't expect a non-string/function type and can throw confusing errors.
   // We don't want exception behavior to differ between dev and prod.
   // (Rendering will throw with a helpful message and as soon as the type is
   // fixed, the key warnings will appear.)
   if (validType) {
-    for (let i = 2; i < arguments.length; i++) {
-      validateChildKeys(arguments[i], type);
+    const children = props.children;
+    if (children !== undefined) {
+      if (isStaticChildren) {
+        if (Array.isArray(children)) {
+          for (let i = 0; i < children.length; i++) {
+            validateChildKeys(children[i], type);
+          }
+          if (Object.freeze) {
+            Object.freeze(children);
+          }
+        } else {
+          if (__DEV__) {
+            console.error(
+              'React.jsx: Static children should always be an array. ' +
+                'You are likely explicitly calling React.jsxs or React.jsxDEV. ' +
+                'Use the Babel transform instead.',
+            );
+          }
+        }
+      } else {
+        validateChildKeys(children, type);
+      }
     }
   }
-
+  if (__DEV__) {
+    if (warnAboutSpreadingKeyToJSX) {
+      if (hasOwnProperty.call(props, 'key')) {
+        console.error(
+          'React.jsx: Spreading a key to JSX is a deprecated pattern. ' +
+            'Explicitly pass a key after spreading props in your JSX call. ' +
+            'E.g. <%s {...props} key={key} />',
+          getComponentName(type) || 'ComponentName',
+        );
+      }
+    }
+  }
   if (type === REACT_FRAGMENT_TYPE) {
     validateFragmentProps(element);
   } else {
     validatePropTypes(element);
   }
-
   return element;
 }
-
-let didWarnAboutDeprecatedCreateFactory = false;
-
-export function createFactoryWithValidation(type) {
-  const validatedFactory = createElementWithValidation.bind(null, type);
-  validatedFactory.type = type;
-  if (__DEV__) {
-    if (!didWarnAboutDeprecatedCreateFactory) {
-      didWarnAboutDeprecatedCreateFactory = true;
-      console.warn(
-        'React.createFactory() is deprecated and will be removed in ' +
-          'a future major release. Consider using JSX ' +
-          'or use React.createElement() directly instead.',
-      );
-    }
-    // Legacy hook: remove it
-    Object.defineProperty(validatedFactory, 'type', {
-      enumerable: false,
-      get: function() {
-        console.warn(
-          'Factory.type is deprecated. Access the class directly ' +
-            'before passing it to createFactory.',
-        );
-        Object.defineProperty(this, 'type', {
-          value: type,
-        });
-        return type;
-      },
-    });
-  }
-
-  return validatedFactory;
+// These two functions exist to still get child warnings in dev
+// even with the prod transform. This means that jsxDEV is purely
+// opt-in behavior for better messages but that we won't stop
+// giving you warnings if you use production apis.
+export function jsxWithValidationStatic(type, props, key) {
+  return jsxWithValidation(type, props, key, true);
 }
-
-export function cloneElementWithValidation(element, props, children) {
-  const newElement = cloneElement.apply(this, arguments);
-  for (let i = 2; i < arguments.length; i++) {
-    validateChildKeys(arguments[i], newElement.type);
-  }
-  validatePropTypes(newElement);
-  return newElement;
+export function jsxWithValidationDynamic(type, props, key) {
+  return jsxWithValidation(type, props, key, false);
 }
