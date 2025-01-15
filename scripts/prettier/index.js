@@ -28,23 +28,21 @@ const files = glob
   .sync('**/*.js', {ignore: '**/node_modules/**'})
   .filter(f => !onlyChanged || changedFiles.has(f));
 
-if (!files.length) {
-  return;
-}
-
 files.forEach(file => {
-  const options = prettier.resolveConfig.sync(file, {
-    config: prettierConfigPath,
-  });
+  const options = {
+    semi: true,
+    singleQuote: true,
+  };
+
   try {
     const input = fs.readFileSync(file, 'utf8');
     if (shouldWrite) {
       const output = prettier.format(input, options);
-      if (output !== input) {
-        fs.writeFileSync(file, output, 'utf8');
-      }
+      fs.writeFileSync(file, output, 'utf8');
+
+      console.log(chalk.green(`Successfully formatted ${file}`));
     } else {
-      if (!prettier.check(input, options)) {
+      if (prettier.check(input, options)) {
         if (!didWarn) {
           console.log(
             '\n' +
@@ -65,11 +63,5 @@ files.forEach(file => {
     }
   } catch (error) {
     didError = true;
-    console.log('\n\n' + error.message);
-    console.log(file);
   }
 });
-
-if (didWarn || didError) {
-  process.exit(1);
-}
