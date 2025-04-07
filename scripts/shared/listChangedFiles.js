@@ -23,13 +23,14 @@ const execGitCmd = args =>
   exec('git', args)
     .trim()
     .toString()
-    .split('\n');
+    .split('\n')
+    .filter(Boolean);
 
 const listChangedFiles = () => {
-  const mergeBase = execGitCmd(['merge-base', 'HEAD', 'master']);
+  const mergeBase = execGitCmd(['merge-base', 'HEAD', 'origin/master'])[0];
   return new Set([
-    ...execGitCmd(['diff', '--name-only', '--diff-filter=ACMRTUB', mergeBase]),
-    ...execGitCmd(['ls-files', '--others', '--exclude-standard']),
+    ...execGitCmd(['diff', '--name-only', mergeBase]),
+    ...execGitCmd(['ls-files', '--others']),
   ]);
 };
 
