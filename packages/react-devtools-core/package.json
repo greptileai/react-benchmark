@@ -25,7 +25,7 @@
   },
   "dependencies": {
     "es6-symbol": "^3",
-    "shell-quote": "^1.6.1",
+    "shell-quote": "^1.11.0",
     "ws": "^7"
   },
   "devDependencies": {
